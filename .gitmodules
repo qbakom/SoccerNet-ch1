@@ -1,0 +1,4 @@
+[submodule "vendor/mmpose"]
+	path = vendor/mmpose
+	url = https://github.com/Spiideo/mmpose.git
+	branch = spiideo_scenes

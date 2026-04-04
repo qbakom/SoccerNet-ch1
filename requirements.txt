@@ -1,0 +1,34 @@
+# local package
+-e .
+
+# core ML
+torch>=2.1.0
+torchvision>=0.16.0
+
+# SoccerNet data download
+SoccerNet
+
+# SynLoc evaluation toolkit
+sskit>=0.2.3
+
+# computer vision
+opencv-python>=4.8
+albumentations>=2.0
+
+# data handling
+numpy>=1.26
+scipy
+h5py
+json_tricks
+xtcocotools>=1.12
+
+# utilities
+click
+python-dotenv>=0.5.1
+tqdm
+matplotlib
+pillow
+
+# MMPose dependencies
+chumpy
+munkres
