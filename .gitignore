@@ -98,3 +98,5 @@ work_dirs/
 
 # Submission artifacts
 *.zip
+*.pth
+*.pt

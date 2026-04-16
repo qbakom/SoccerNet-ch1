@@ -52,7 +52,21 @@ provides near-perfect pixel→world mapping (0.05m error). Therefore:
 | +Camera post-proc | - | - | - | ~84 |
 | +Training tricks | - | - | 300+ | ~85+ |
 
+## Critical: Small Object Problem
+
+94.3% of players are "small" by COCO standards (area < 1024 px² in FullHD).
+51.7% have a side < 16 pixels. Resolution is the #1 factor:
+
+| Input resolution | Players well-detected (>8×8 px) |
+|-----------------|--------------------------------|
+| 640px | 15.0% |
+| 960px | 43.6% |
+| 1280px | 77.2% |
+
+**1280px input is non-negotiable for competitive results.**
+
 ## What NOT to spend time on
 - Custom loss functions for position_on_pitch regression (camera model is better)
 - Complex NMS strategies (default works fine for non-overlapping players)
 - Data augmentation that distorts player shape (players are already tiny)
+- Training on 4K images (same effective object size as FullHD with matched resolution)
