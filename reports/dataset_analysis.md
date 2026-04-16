@@ -41,7 +41,26 @@
 ### 6. Challenge Set
 - 11,352 images with NO annotations — submit-only evaluation via Codabench
 
+### 7. Camera Parameters
+- Each image has `camera_matrix` (3x4 projection), `dist_poly`, `undist_poly`
+- Enables analytical world coordinate localization (bypass keypoint regression)
+
+## Smoke Test Results (YOLOX-tiny@640, 5 epochs)
+
+| Metric | Value |
+|--------|-------|
+| locsim/AP (mAP-LocSim) | 28.8 |
+| locsim/AP .5 | 45.3 |
+| locsim/precision | 64.9% |
+| locsim/recall | 45.0% |
+| locsim/f1 | 53.2% |
+| bbox/AP | 26.2 |
+| bbox/AP .5 | 71.1 |
+
+Baseline target (YOLOX-m@960, 300 epochs): 76.17 mAP-LocSim
+
 ## Files
 - Images: `data/raw/SoccerNet/SpiideoSynLoc/{train,val,test,challenge}/`
-- Annotations: `data/raw/SoccerNet/SpiideoSynLoc/annotations/{train,val,test,challenge_public,mini}.json`
+- Annotations (4K): `annotations/{train,val,test,challenge_public,mini}.json`
+- Annotations (FullHD): `annotations_fullhd/` (scaled 0.5x — use these for training)
 - Format: COCO with `position_on_pitch: [x, y, z]` extension
