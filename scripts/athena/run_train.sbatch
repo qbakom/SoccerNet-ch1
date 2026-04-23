@@ -81,9 +81,21 @@ if [ -n "$LOAD_FROM" ]; then
 fi
 
 if [ -n "$WANDB_PROJECT" ]; then
-    CFG_OPTS+=(
-        "visualizer.vis_backends=[dict(type='LocalVisBackend'),dict(type='WandbVisBackend',init_kwargs=dict(project='$WANDB_PROJECT',name='$RUN_NAME'))]"
-    )
+    # --cfg-options can't parse nested dict() expressions — generate wrapper config
+    CONFIG_DIR="configs/body_bev_position/spiideo_soccernet"
+    WRAPPER="$CONFIG_DIR/_wandb_${MODEL}_${RESOLUTION}_$$.py"
+    cat > "$WRAPPER" <<EOF
+_base_ = './yoloxpose_${MODEL}_4xb64-300e_${RESOLUTION}.py'
+vis_backends = [
+    dict(type='LocalVisBackend'),
+    dict(type='WandbVisBackend',
+         init_kwargs=dict(project='$WANDB_PROJECT', name='$RUN_NAME')),
+]
+visualizer = dict(vis_backends=vis_backends)
+EOF
+    CONFIG="$WRAPPER"
+    trap "rm -f $WRAPPER" EXIT
+    echo "Using wandb wrapper config: $WRAPPER"
 fi
 
 srun "$PY" -m torch.distributed.run --standalone --nproc_per_node=1 \
