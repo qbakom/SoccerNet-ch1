@@ -20,6 +20,9 @@ module load Miniconda3/23.3.1-0
 source "$(conda info --base)/etc/profile.d/conda.sh"
 conda activate $SCRATCH/conda_envs/synloc
 
+# Use env python explicitly — srun does not inherit conda-activated PATH reliably
+PY="$SCRATCH/conda_envs/synloc/bin/python"
+
 # --- Parse arguments ---
 MODEL=${1:-m}
 RESOLUTION=${2:-960}
@@ -68,7 +71,7 @@ if [ -n "$LOAD_FROM" ]; then
     CFG_OPTS+=("load_from=$LOAD_FROM")
 fi
 
-srun python -m torch.distributed.run --standalone --nproc_per_node=1 \
+srun "$PY" -m torch.distributed.run --standalone --nproc_per_node=1 \
     tools/train.py $CONFIG \
     --launcher pytorch \
     --cfg-options "${CFG_OPTS[@]}" \

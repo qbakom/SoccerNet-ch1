@@ -18,6 +18,8 @@ module load Miniconda3/23.3.1-0
 source "$(conda info --base)/etc/profile.d/conda.sh"
 conda activate $SCRATCH/conda_envs/synloc
 
+PY="$SCRATCH/conda_envs/synloc/bin/python"
+
 CHECKPOINT=$1
 MODEL=${2:-m}
 RESOLUTION=${3:-960}
@@ -35,7 +37,7 @@ cd $SCRATCH/synloc/vendor/mmpose
 CONFIG="configs/body_bev_position/spiideo_soccernet/yoloxpose_${MODEL}_4xb64-300e_${RESOLUTION}.py"
 WORK_DIR="$SCRATCH/synloc/work_dirs/test_submission_${MODEL}_${RESOLUTION}"
 
-srun python -m torch.distributed.run --standalone --nproc_per_node=1 \
+srun "$PY" -m torch.distributed.run --standalone --nproc_per_node=1 \
     tools/test.py $CONFIG $CHECKPOINT \
     --launcher pytorch \
     --cfg-options \
