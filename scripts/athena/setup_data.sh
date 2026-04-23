@@ -5,6 +5,13 @@
 set -e
 export SCRATCH=/net/tscratch/people/$USER
 
+# Use env python directly — avoid PATH/conda-activate quirks in non-interactive shells
+PY="$SCRATCH/conda_envs/synloc/bin/python"
+if [ ! -x "$PY" ]; then
+    echo "ERROR: $PY not found. Run setup_env.sh first."
+    exit 1
+fi
+
 echo "=== Setting up SynLoc data on Athena ==="
 cd $SCRATCH/synloc
 
@@ -19,7 +26,7 @@ mkdir -p ~/.cache/spiideo_research
 CRED_FILE=~/.cache/spiideo_research/credentials.json
 if [ ! -f "$CRED_FILE" ]; then
     if [ -n "${SPIIDEO_EMAIL:-}" ] && [ -n "${SPIIDEO_PASSWORD:-}" ]; then
-        python -c "import json,sys; json.dump([sys.argv[1],sys.argv[2]], open(sys.argv[3],'w'))" \
+        "$PY" -c "import json,sys; json.dump([sys.argv[1],sys.argv[2]], open(sys.argv[3],'w'))" \
             "$SPIIDEO_EMAIL" "$SPIIDEO_PASSWORD" "$CRED_FILE"
         chmod 600 "$CRED_FILE"
     else
@@ -31,14 +38,7 @@ fi
 
 # Download dataset
 echo "Downloading SynLoc dataset..."
-module load Miniconda3/23.3.1-0
-source "$(conda info --base)/etc/profile.d/conda.sh"
-conda activate $SCRATCH/conda_envs/synloc || {
-    echo "Create conda env first: conda create -p $SCRATCH/conda_envs/synloc python=3.11 -y && conda activate $SCRATCH/conda_envs/synloc && pip install SoccerNet boto3"
-    exit 1
-}
-
-python -c "
+"$PY" -c "
 from SoccerNet.Downloader import SoccerNetDownloader
 d = SoccerNetDownloader(LocalDirectory='data/raw/SoccerNet')
 d.downloadDataTask(task='SpiideoSynLoc', split=['train','valid','test','challenge'], version='fullhd')
@@ -58,7 +58,7 @@ done
 # Create FullHD annotations (scale 4K → FullHD)
 echo "Scaling annotations 4K → FullHD..."
 cd $SCRATCH/synloc
-python -c "
+"$PY" -c "
 import json, os
 SCALE = 0.5
 ann_dir = 'data/raw/SoccerNet/SpiideoSynLoc/annotations'
