@@ -64,9 +64,14 @@ echo "[4/5] Build deps (no-build-isolation — need numpy<2 present)"
 "$PIP" install --no-build-isolation xtcocotools chumpy
 
 echo "[5/5] Runtime + MMPose (editable from vendor/)"
-"$PIP" install SoccerNet sskit json_tricks munkres scipy \
+# Constrain numpy<2 across all installs — some of these deps (opencv, matplotlib,
+# boto3) may otherwise pull numpy>=2 which breaks torch/mmcv compiled against 1.x.
+"$PIP" install "numpy<2" SoccerNet sskit json_tricks munkres scipy \
     opencv-python pillow matplotlib boto3
 "$PIP" install --no-build-isolation -e vendor/mmpose
+
+# Final guard: if anything above sneaked numpy>=2, force back down.
+"$PIP" install --force-reinstall --no-deps "numpy<2"
 
 echo ""
 echo "=== Env ready at $ENV_PATH ==="
