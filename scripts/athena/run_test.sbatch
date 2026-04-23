@@ -41,10 +41,11 @@ srun "$PY" -m torch.distributed.run --standalone --nproc_per_node=1 \
     tools/test.py $CONFIG $CHECKPOINT \
     --launcher pytorch \
     --cfg-options \
-        "test_dataloader.dataset.ann_file=annotations_fullhd/test.json" \
-        "test_evaluator.0.ann_file=data/SoccerNet/SpiideoSynLoc/annotations_fullhd/test.json" \
-        "test_evaluator.1.ann_file=data/SoccerNet/SpiideoSynLoc/annotations_fullhd/test.json" \
-        "test_evaluator.2.ann_file=data/SoccerNet/SpiideoSynLoc/annotations_fullhd/test.json" \
+        "val_dataloader.dataset.ann_file=annotations_fullhd/test.json" \
+        "val_dataloader.dataset.data_prefix.img=test" \
+        "val_evaluator.0.ann_file=data/SoccerNet/SpiideoSynLoc/annotations_fullhd/test.json" \
+        "val_evaluator.1.ann_file=data/SoccerNet/SpiideoSynLoc/annotations_fullhd/test.json" \
+        "val_evaluator.2.ann_file=data/SoccerNet/SpiideoSynLoc/annotations_fullhd/test.json" \
     --work-dir $WORK_DIR
 
 echo "Test submission in: $WORK_DIR"
