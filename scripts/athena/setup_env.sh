@@ -29,10 +29,17 @@ if [ ! -d "$ENV_PATH" ]; then
     echo "Creating conda env at $ENV_PATH"
     conda create -p "$ENV_PATH" python=3.11 -y
 fi
-conda activate "$ENV_PATH"
+
+# Use env binaries directly — do NOT rely on `conda activate` / PATH resolution.
+# Also block user-site fallback so nothing ever leaks to ~/.local.
+PY="$ENV_PATH/bin/python"
+PIP="$ENV_PATH/bin/pip"
+export PYTHONNOUSERSITE=1
+export PIP_USER=0
+export PIP_NO_USER=1
 
 # Short-circuit if env is already fully provisioned.
-if python -c "import mmpose, mmdet, mmcv, torch, SoccerNet, sskit" 2>/dev/null; then
+if "$PY" -c "import mmpose, mmdet, mmcv, torch, SoccerNet, sskit" 2>/dev/null; then
     echo "Env already provisioned — nothing to do."
     exit 0
 fi
@@ -40,23 +47,23 @@ fi
 cd "$PROJECT_DIR"
 
 echo "[1/5] PyTorch 2.1.0 + CUDA 12.1"
-pip install torch==2.1.0 torchvision==0.16.0 \
+"$PIP" install torch==2.1.0 torchvision==0.16.0 \
     --index-url https://download.pytorch.org/whl/cu121
 
 echo "[2/5] MMEngine + MMCV 2.1.0"
-pip install mmengine "mmcv==2.1.0" \
+"$PIP" install mmengine "mmcv==2.1.0" \
     -f https://download.openmmlab.com/mmcv/dist/cu121/torch2.1/index.html
 
 echo "[3/5] Core deps (pinned: numpy<2, setuptools<70)"
-pip install mmdet "numpy<2" "setuptools<70" cython
+"$PIP" install mmdet "numpy<2" "setuptools<70" cython
 
 echo "[4/5] Build deps (no-build-isolation — need numpy<2 present)"
-pip install --no-build-isolation xtcocotools chumpy
+"$PIP" install --no-build-isolation xtcocotools chumpy
 
 echo "[5/5] Runtime + MMPose (editable from vendor/)"
-pip install SoccerNet sskit json_tricks munkres scipy \
+"$PIP" install SoccerNet sskit json_tricks munkres scipy \
     opencv-python pillow matplotlib boto3
-pip install --no-build-isolation -e vendor/mmpose
+"$PIP" install --no-build-isolation -e vendor/mmpose
 
 echo ""
 echo "=== Env ready at $ENV_PATH ==="
