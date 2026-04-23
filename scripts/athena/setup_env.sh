@@ -67,7 +67,7 @@ echo "[5/5] Runtime + MMPose (editable from vendor/)"
 # Constrain numpy<2 across all installs — some of these deps (opencv, matplotlib,
 # boto3) may otherwise pull numpy>=2 which breaks torch/mmcv compiled against 1.x.
 "$PIP" install "numpy<2" SoccerNet sskit json_tricks munkres scipy \
-    opencv-python-headless pillow matplotlib boto3
+    "opencv-python-headless<4.11" pillow matplotlib boto3
 "$PIP" install --no-build-isolation -e vendor/mmpose
 
 # Final guard: if anything above sneaked numpy>=2, force back down.
