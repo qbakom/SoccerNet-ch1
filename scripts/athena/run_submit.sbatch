@@ -36,8 +36,8 @@ srun python -m torch.distributed.run --standalone --nproc_per_node=1 \
     tools/test.py $CONFIG $CHECKPOINT \
     --launcher pytorch \
     --cfg-options \
-        "val_dataloader.dataset.ann_file=annotations_fullhd/challenge_public.json" \
-        "val_dataloader.dataset.data_prefix.img=challenge" \
+        "challenge_dataset.ann_file=annotations_fullhd/challenge_public.json" \
+        "bev_challenge_evaluator.0.ann_file=data/SoccerNet/SpiideoSynLoc/annotations_fullhd/challenge_public.json" \
     --work-dir $SCRATCH/synloc/work_dirs/submission_${MODEL}_${RESOLUTION} \
     --challenge
 

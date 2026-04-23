@@ -24,10 +24,12 @@ conda activate $SCRATCH/conda_envs/synloc
 MODEL=${1:-m}
 RESOLUTION=${2:-960}
 EPOCHS=${3:-300}
+LOAD_FROM=${4:-}   # optional: path to pretrained .pth to fine-tune from
 
 echo "=========================================="
 echo "Training YOLOX-${MODEL} @ ${RESOLUTION}px"
 echo "Epochs: ${EPOCHS}"
+echo "Load from: ${LOAD_FROM:-<none, from scratch>}"
 echo "Node: $(hostname), GPU: $(nvidia-smi -L)"
 echo "=========================================="
 
@@ -52,18 +54,24 @@ case "${MODEL}_${RESOLUTION}" in
     *)        BATCH=8  ;;
 esac
 
+CFG_OPTS=(
+    "train_cfg.max_epochs=$EPOCHS"
+    "train_dataloader.batch_size=$BATCH"
+    "train_dataloader.num_workers=8"
+    "train_dataloader.dataset.ann_file=annotations_fullhd/train.json"
+    "val_dataloader.dataset.ann_file=annotations_fullhd/val.json"
+    "val_evaluator.0.ann_file=data/SoccerNet/SpiideoSynLoc/annotations_fullhd/val.json"
+    "val_evaluator.1.ann_file=data/SoccerNet/SpiideoSynLoc/annotations_fullhd/val.json"
+    "val_evaluator.2.ann_file=data/SoccerNet/SpiideoSynLoc/annotations_fullhd/val.json"
+)
+if [ -n "$LOAD_FROM" ]; then
+    CFG_OPTS+=("load_from=$LOAD_FROM")
+fi
+
 srun python -m torch.distributed.run --standalone --nproc_per_node=1 \
     tools/train.py $CONFIG \
     --launcher pytorch \
-    --cfg-options \
-        train_cfg.max_epochs=$EPOCHS \
-        train_dataloader.batch_size=$BATCH \
-        train_dataloader.num_workers=8 \
-        train_dataloader.dataset.ann_file=annotations_fullhd/train.json \
-        val_dataloader.dataset.ann_file=annotations_fullhd/val.json \
-        "val_evaluator.0.ann_file=data/SoccerNet/SpiideoSynLoc/annotations_fullhd/val.json" \
-        "val_evaluator.1.ann_file=data/SoccerNet/SpiideoSynLoc/annotations_fullhd/val.json" \
-        "val_evaluator.2.ann_file=data/SoccerNet/SpiideoSynLoc/annotations_fullhd/val.json" \
+    --cfg-options "${CFG_OPTS[@]}" \
     --amp \
     --work-dir $WORK_DIR
 
