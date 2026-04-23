@@ -37,9 +37,14 @@ cd $SCRATCH/synloc/vendor/mmpose
 CONFIG="configs/body_bev_position/spiideo_soccernet/yoloxpose_${MODEL}_4xb64-300e_${RESOLUTION}.py"
 WORK_DIR="$SCRATCH/synloc/work_dirs/test_submission_${MODEL}_${RESOLUTION}"
 
+PRED_PKL="$WORK_DIR/predictions.pkl"
+OUTPUT_ZIP="$WORK_DIR/test_submission_bev.zip"
+
+# Step 1: MMPose inference, dump raw predictions to .pkl
 srun "$PY" -m torch.distributed.run --standalone --nproc_per_node=1 \
     tools/test.py $CONFIG $CHECKPOINT \
     --launcher pytorch \
+    --dump "$PRED_PKL" \
     --cfg-options \
         "val_dataloader.dataset.ann_file=annotations_fullhd/test.json" \
         "val_dataloader.dataset.data_prefix.img=test" \
@@ -48,6 +53,16 @@ srun "$PY" -m torch.distributed.run --standalone --nproc_per_node=1 \
         "val_evaluator.2.ann_file=data/SoccerNet/SpiideoSynLoc/annotations_fullhd/test.json" \
     --work-dir $WORK_DIR
 
-echo "Test submission in: $WORK_DIR"
-ls -la $WORK_DIR/test_submission.zip 2>/dev/null
-echo "Upload test_submission.zip to Codabench Test phase."
+# Step 2: project keypoints → BEV via camera_matrix (from ORIGINAL 4K annotations)
+"$PY" $SCRATCH/synloc/scripts/make_submission.py \
+    "$PRED_PKL" \
+    "$SCRATCH/synloc/data/raw/SoccerNet/SpiideoSynLoc/annotations/test.json" \
+    "$OUTPUT_ZIP" \
+    --score-threshold 0.3 \
+    --fullhd-scale 2.0
+
+echo "=========================================="
+echo "BEV submission: $OUTPUT_ZIP"
+ls -la "$OUTPUT_ZIP" 2>/dev/null
+echo "Upload to Codabench Test phase."
+echo "=========================================="
