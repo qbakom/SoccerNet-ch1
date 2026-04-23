@@ -13,10 +13,21 @@ mkdir -p vendor/mmpose/data/SoccerNet
 ln -sfn $SCRATCH/synloc/data/raw/SoccerNet/SpiideoSynLoc vendor/mmpose/data/SoccerNet/SpiideoSynLoc
 
 # Cache Spiideo credentials
+# Provide via env vars SPIIDEO_EMAIL / SPIIDEO_PASSWORD, or place the JSON manually at
+#   ~/.cache/spiideo_research/credentials.json   (format: ["email", "password"])
 mkdir -p ~/.cache/spiideo_research
-cat > ~/.cache/spiideo_research/credentials.json << 'EOF'
-["qbakom@hotmail.com", "Warszawa123!"]
-EOF
+CRED_FILE=~/.cache/spiideo_research/credentials.json
+if [ ! -f "$CRED_FILE" ]; then
+    if [ -n "${SPIIDEO_EMAIL:-}" ] && [ -n "${SPIIDEO_PASSWORD:-}" ]; then
+        python -c "import json,sys; json.dump([sys.argv[1],sys.argv[2]], open(sys.argv[3],'w'))" \
+            "$SPIIDEO_EMAIL" "$SPIIDEO_PASSWORD" "$CRED_FILE"
+        chmod 600 "$CRED_FILE"
+    else
+        echo "ERROR: $CRED_FILE missing and SPIIDEO_EMAIL/SPIIDEO_PASSWORD not set."
+        echo "Either export both vars or create the file manually."
+        exit 1
+    fi
+fi
 
 # Download dataset
 echo "Downloading SynLoc dataset..."

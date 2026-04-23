@@ -100,3 +100,17 @@ work_dirs/
 *.zip
 *.pth
 *.pt
+*.pkl
+
+# SLURM / Athena logs
+slurm-*.out
+slurm_*.log
+
+# Secrets
+credentials.json
+.env
+.env.*
+!.env.example
+
+# Local-only docs
+CLAUDE.md

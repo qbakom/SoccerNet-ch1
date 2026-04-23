@@ -13,29 +13,12 @@ export SCRATCH=/net/tscratch/people/$USER
 export HF_HOME=$SCRATCH/huggingface
 export PYTHONPYCACHEPREFIX=$SCRATCH/pycache
 
-# Load conda
+# Ensure env exists (idempotent — no-op if already provisioned)
+bash $SCRATCH/synloc/scripts/athena/setup_env.sh
+
 module load Miniconda3/23.3.1-0
 source "$(conda info --base)/etc/profile.d/conda.sh"
-
-# Activate or create env
-ENV_PATH=$SCRATCH/conda_envs/synloc
-if [ ! -d "$ENV_PATH" ]; then
-    echo "Creating conda env at $ENV_PATH ..."
-    conda create -p $ENV_PATH python=3.11 -y
-fi
-conda activate $ENV_PATH
-
-# Install deps (only first time)
-if ! python -c "import mmpose" 2>/dev/null; then
-    echo "Installing dependencies..."
-    pip install torch==2.1.0 torchvision==0.16.0 --index-url https://download.pytorch.org/whl/cu121
-    pip install mmengine "mmcv==2.1.0" -f https://download.openmmlab.com/mmcv/dist/cu121/torch2.1/index.html
-    pip install mmdet "numpy<2" "setuptools<70" cython
-    pip install --no-build-isolation xtcocotools chumpy
-    pip install SoccerNet sskit json_tricks munkres scipy opencv-python pillow matplotlib
-    cd $SCRATCH/synloc/vendor/mmpose && pip install --no-build-isolation -e .
-    cd $SCRATCH/synloc
-fi
+conda activate $SCRATCH/conda_envs/synloc
 
 # --- Parse arguments ---
 MODEL=${1:-m}
