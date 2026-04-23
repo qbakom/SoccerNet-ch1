@@ -12,6 +12,10 @@
 export SCRATCH=/net/tscratch/people/$USER
 export HF_HOME=$SCRATCH/huggingface
 export PYTHONPYCACHEPREFIX=$SCRATCH/pycache
+export WANDB_DIR=$SCRATCH/wandb
+export WANDB_CACHE_DIR=$SCRATCH/.cache/wandb
+export WANDB_CONFIG_DIR=$SCRATCH/.config/wandb
+mkdir -p "$WANDB_DIR" "$WANDB_CACHE_DIR" "$WANDB_CONFIG_DIR"
 
 # Ensure env exists (idempotent — no-op if already provisioned)
 bash $SCRATCH/synloc/scripts/athena/setup_env.sh
@@ -27,12 +31,17 @@ PY="$SCRATCH/conda_envs/synloc/bin/python"
 MODEL=${1:-m}
 RESOLUTION=${2:-960}
 EPOCHS=${3:-300}
-LOAD_FROM=${4:-}   # optional: path to pretrained .pth to fine-tune from
+LOAD_FROM=${4:-}     # optional: path to pretrained .pth
+WANDB_PROJECT=${5:-} # optional: wandb project name, enables wandb logging
+
+RUN_NAME="yoloxpose_${MODEL}_${RESOLUTION}_$(date +%m%d_%H%M)"
 
 echo "=========================================="
 echo "Training YOLOX-${MODEL} @ ${RESOLUTION}px"
 echo "Epochs: ${EPOCHS}"
 echo "Load from: ${LOAD_FROM:-<none, from scratch>}"
+echo "Wandb:    ${WANDB_PROJECT:-<disabled>}"
+echo "Run:      $RUN_NAME"
 echo "Node: $(hostname), GPU: $(nvidia-smi -L)"
 echo "=========================================="
 
@@ -69,6 +78,12 @@ CFG_OPTS=(
 )
 if [ -n "$LOAD_FROM" ]; then
     CFG_OPTS+=("load_from=$LOAD_FROM")
+fi
+
+if [ -n "$WANDB_PROJECT" ]; then
+    CFG_OPTS+=(
+        "visualizer.vis_backends=[dict(type='LocalVisBackend'),dict(type='WandbVisBackend',init_kwargs=dict(project='$WANDB_PROJECT',name='$RUN_NAME'))]"
+    )
 fi
 
 srun "$PY" -m torch.distributed.run --standalone --nproc_per_node=1 \
