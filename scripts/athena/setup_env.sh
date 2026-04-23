@@ -31,12 +31,15 @@ if [ ! -d "$ENV_PATH" ]; then
 fi
 
 # Use env binaries directly — do NOT rely on `conda activate` / PATH resolution.
-# Also block user-site fallback so nothing ever leaks to ~/.local.
 PY="$ENV_PATH/bin/python"
 PIP="$ENV_PATH/bin/pip"
-export PYTHONNOUSERSITE=1
+
+# Prevent pip from falling back to --user install (~/.local).
+# NOTE: PYTHONNOUSERSITE must be UNSET during pip install — pip 26.0.1 has a bug
+# where it tries --user when the variable is set, even in a writable conda env.
+# Keep PYTHONNOUSERSITE=1 in ~/.bashrc as runtime protection; here we just unset it.
+unset PYTHONNOUSERSITE
 export PIP_USER=0
-export PIP_NO_USER=1
 
 # Short-circuit if env is already fully provisioned.
 if "$PY" -c "import mmpose, mmdet, mmcv, torch, SoccerNet, sskit" 2>/dev/null; then
