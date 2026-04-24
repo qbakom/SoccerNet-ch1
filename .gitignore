@@ -114,3 +114,5 @@ credentials.json
 
 # Local-only docs
 CLAUDE.md
+
+.venv/
