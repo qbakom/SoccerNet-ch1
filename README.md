@@ -1,78 +1,107 @@
 # SoccerNet SynLoc 2026
 
-Single-Frame World-Coordinate Athlete Detection & Localization with Synthetic Data.
+Single-frame world-coordinate athlete detection and localization from synthetic broadcast data.
 
-[Challenge page](https://www.soccer-net.org/challenges/2026) | [Leaderboard](https://www.codabench.org/competitions/10128/) | [Paper (VISAPP 2025)](https://research.spiideo.com/)
+[Challenge](https://www.soccer-net.org/challenges/2026) | [Codabench](https://www.codabench.org/competitions/10155/) | [Baseline paper (VISAPP 2025)](https://research.spiideo.com/)
 
 ## Task
 
-Detect all players in a single broadcast frame and predict their position on the pitch in meters (world coordinates). The baseline uses YOLOX-Pose with a pelvis keypoint projected to ground-plane coordinates, evaluated via mAP-LocSim.
+Detect all players in a single broadcast frame and predict their **position on the pitch in meters** (world coordinates). Evaluated via mAP-LocSim.
 
-## Quickstart
+## Approach
+
+YOLOX-Pose detects players and predicts a `pelvis_ground` keypoint. That keypoint is projected from image coordinates to world coordinates using the per-image camera matrix and undistortion polynomial via [sskit](https://pypi.org/project/sskit/).
+
+## Setup
 
 ```bash
-# 1. Clone with submodules
-git clone --recursive git@github.com:qbakom/SoccerNet.git
-cd SoccerNet
+git clone --recurse-submodules git@github.com:qbakom/SoccerNet-ch1.git
+cd SoccerNet-ch1
+python3 -m venv .venv && source .venv/bin/activate
 
-# 2. Set up environment
-bash setup_env.sh
-source venv/bin/activate
-
-# 3. Download dataset
-synloc data download
-
-# 4. Validate
-synloc data validate
-
-# 5. Train (smoke test)
-synloc train --model tiny --resolution 640 --epochs 5
-
-# 6. Evaluate
-synloc eval run models/checkpoint.pth --split valid
-
-# 7. Submit
-synloc eval submit models/checkpoint.pth
+pip install torch==2.1.0 torchvision==0.16.0 --index-url https://download.pytorch.org/whl/cu121
+pip install mmengine "mmcv==2.1.0" -f https://download.openmmlab.com/mmcv/dist/cu121/torch2.1/index.html
+pip install mmdet "numpy<2" "setuptools<70" cython
+pip install --no-build-isolation xtcocotools chumpy
+pip install SoccerNet sskit json_tricks munkres scipy opencv-python-headless pillow matplotlib boto3
+cd vendor/mmpose && pip install --no-build-isolation -e . && cd ../..
 ```
 
-## Project Structure
+For Athena (Cyfronet): `bash scripts/athena/setup_env.sh`
 
-```
-├── data/raw/SoccerNet/SpiideoSynLoc/  <- Dataset (downloaded, not in git)
-├── models/                             <- Trained checkpoints
-├── reports/                            <- Evaluation metrics
-│   └── figures/                        <- Visualizations
-├── notebooks/                          <- Exploration notebooks
-├── src/synloc/                         <- Source code
-│   ├── cli.py                          <- CLI entry point
-│   ├── config.py                       <- Paths and configuration
-│   ├── dataset.py                      <- Data download & validation
-│   ├── visualization.py                <- Pitch plotting utilities
-│   └── modeling/
-│       ├── train.py                    <- Training wrapper
-│       └── predict.py                  <- Evaluation & submission
-├── vendor/mmpose/                      <- Spiideo MMPose fork (submodule)
-├── setup_env.sh                        <- One-shot environment setup
-├── Makefile                            <- Make targets
-└── requirements.txt                    <- Python dependencies
+## Dataset
+
+```bash
+python -c "
+from SoccerNet.Downloader import SoccerNetDownloader
+d = SoccerNetDownloader(LocalDirectory='data/raw/SoccerNet')
+d.downloadDataTask(task='SpiideoSynLoc', split=['train','valid','test','challenge'], version='fullhd')
+"
 ```
 
-## Available Models
+Images are FullHD (1920x1080). Annotations ship in 4K and **must be scaled to FullHD** before training — see `scripts/athena/setup_data.sh` for the scaling step.
 
-| Model | Resolution | Baseline mAP-LocSim | GFLOPs |
-|-------|-----------|---------------------|--------|
-| YOLOX-tiny | 640 | ~60.6 | 10.3 |
-| YOLOX-small | 640 | ~70.0 | — |
-| YOLOX-m | 960 | **76.17** | 108.0 |
-| YOLOX-l | 960 | ~79.3 | — |
+## Training
 
-## CLI Reference
+All training runs from `vendor/mmpose/`:
+
+```bash
+# Local (single GPU)
+bash scripts/train_baseline.sh 1 m 960 300
+
+# Athena (SLURM)
+sbatch scripts/athena/run_train.sbatch m 960 300
+
+# Fine-tune from pretrained checkpoint
+sbatch scripts/athena/run_train.sbatch m 1280 100 /path/to/pretrained.pth
+```
+
+## Evaluation
+
+```bash
+bash scripts/evaluate.sh work_dirs/yoloxpose_m_960/best.pth m 960 val
+```
+
+## Submission
+
+Generate submission zip for Codabench:
+
+```bash
+# Test phase (test split)
+sbatch scripts/athena/run_test.sbatch /path/to/checkpoint.pth m 960
+
+# Challenge phase (challenge split)
+sbatch scripts/athena/run_submit.sbatch /path/to/checkpoint.pth m 960
+```
+
+Or locally: `bash scripts/submit.sh /path/to/checkpoint.pth m 960`
+
+## Project structure
 
 ```
-synloc data download       # Download dataset
-synloc data validate       # Check dataset integrity
-synloc train               # Train (default: m @ 960px)
-synloc eval run <ckpt>     # Evaluate on valid/test
-synloc eval submit <ckpt>  # Generate submission zip
-synloc visualize           # Plot pitch positions
+├── vendor/mmpose/          <- Spiideo MMPose fork (submodule)
+├── scripts/
+│   ├── train_baseline.sh   <- Local training wrapper
+│   ├── evaluate.sh         <- Evaluation on val/test
+│   ├── submit.sh           <- Local submission generation
+│   ├── make_submission.py  <- Predictions .pkl → Codabench zip
+│   ├── analytical_localize.py
+│   ├── tta_inference.py    <- Test-time augmentation
+│   └── athena/             <- SLURM scripts for Cyfronet A100
+├── reports/                <- Analysis and figures
+├── data/                   <- Dataset (not in git)
+├── models/                 <- Checkpoints (not in git)
+└── work_dirs/              <- Training outputs (not in git)
 ```
+
+## Baseline results
+
+| Model | Resolution | mAP-LocSim |
+|-------|-----------|------------|
+| YOLOX-tiny | 640 | ~60.6 |
+| YOLOX-s | 640 | ~70.0 |
+| YOLOX-m | 960 | **76.17** |
+
+## Acknowledgements
+
+This research was supported in part by PL-Grid Infrastructure grant nr PLG/2025/018167.
