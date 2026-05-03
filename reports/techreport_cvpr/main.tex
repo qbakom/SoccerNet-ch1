@@ -1,0 +1,143 @@
+% SoccerNet 2026 — Synloc Challenge — Technical Report
+% Team: qbakom
+% Format: CVPR 2026, double-column, max 2 pages (excluding refs)
+
+\documentclass[10pt,twocolumn,letterpaper]{article}
+
+\usepackage[review]{cvpr}
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage{xcolor}
+\usepackage{enumitem}
+
+\definecolor{cvprblue}{rgb}{0.21,0.49,0.74}
+\hypersetup{colorlinks=true, allcolors=cvprblue}
+
+\def\cvprPaperID{****}
+\def\confName{SoccerNet 2026 Challenges}
+\def\confYear{2026}
+
+\title{Multi-Scale Test-Time Augmentation and Weighted Box Fusion\\
+       for Synthetic Player Localization}
+
+\author{Jakub Komosa\\
+Artificial Intelligence Society Golem,\\Warsaw University of Technology\\
+\texttt{jakub.komosa2.stud@pw.edu.pl}\\
+\small Codabench: \texttt{linux\_godfather}~~$\cdot$~~\url{https://github.com/qbakom/SoccerNet-ch1}}
+
+\begin{document}
+\maketitle
+
+\section{Approach Overview}
+\label{sec:overview}
+
+We address the SoccerNet 2026 Synthetic Localization (Synloc) challenge by extending the official Spiideo YOLOX-Pose baseline~\cite{spiideo} with: (i) input-resolution multi-scale test-time augmentation (TTA), (ii) Weighted Box Fusion (WBF)~\cite{wbf} ensembling of a finetuned and a non-finetuned variant, and (iii) several pipeline corrections affecting score-threshold computation and submission format. These changes raise our challenge mAP-LocSim from $51.11$ (broken-pipeline baseline) to $\mathbf{66.92}$.
+
+The task estimates the bird's-eye view (BEV) position of every player from a single broadcast frame, given a per-image GT camera matrix. Per the baseline, we predict $K{=}2$ keypoints per detection: a body-center anchor and a \emph{ground} pelvis. The evaluator projects keypoint index 1 (the ground pelvis) to BEV through \texttt{sskit.image\_to\_ground} and computes mAP-LocSim integrated over distance thresholds $\{0.5, 1, 2, 3, 5\}\,\text{m}$.
+
+\section{Detection and Pose Estimation}
+\label{sec:model}
+
+\paragraph{Architecture.} YOLOX-Pose~Medium following the \texttt{spiideo\_scenes} branch of MMPose~\cite{spiideo}: CSPDarknet backbone, PAFPN neck, decoupled detection / keypoint heads, $K=2$.
+
+\paragraph{Training data.} Synloc 2026 train split, 7 broadcast cameras, 4K source imagery (3840$\times$2160), $\sim$11{,}000 frames.
+
+\paragraph{Training schedule.} We finetune the official Synloc baseline checkpoint for 30 additional epochs on a single A100 80\,GB. Optimizer: AdamW, lr $4{\times}10^{-5}$, weight decay $0.05$, cosine decay. Batch size $32$. Standard MMPose YOLOX-Pose augmentations (mosaic + mixup with last-10-epochs cool-down, random affine, color jitter). Input letter-boxed to $960{\times}960$. Loss: YOLOX classification + IoU + objectness + keypoint OKS, default weights.
+
+\paragraph{Compute.} $\sim$28 GPU-h finetune + $\sim$10 GPU-h multi-scale inference + ensembling on PLGrid Athena (4$\times$A100 partition).
+
+\section{Inference Pipeline}
+\label{sec:inference}
+
+\paragraph{Score thresholding.} The Codabench evaluator parses \texttt{metadata.json}\\\texttt{score\_threshold} as the operating point that the model commits to (the BEV evaluator filters detections whose score is below this value before LocSim matching). We compute it as the F1-optimal threshold on the val split, sweeping $0.05{\dots}0.95$. Across configurations this falls in the $0.50{-}0.70$ range; using the MMPose default of $0.05$ instead inflates false positives and degrades mAP-LocSim by $\sim$5--8 points.
+
+\paragraph{Multi-scale TTA.} For both the baseline checkpoint and our finetuned checkpoint we run inference three times with letter-box sizes $\{640, 960, 1280\}$. Each pass produces an independent submission zip in challenge format.
+
+\paragraph{Coordinate space.} The Synloc evaluator expects keypoints in the native source resolution (4K), \emph{not} in the network input space (960). We rescale all predictions back to 4K via the inverse letter-box transform applied to bounding boxes and both keypoints; this is implemented in our \texttt{rescale\_submission.py}.
+
+\section{Ensembling via Weighted Box Fusion}
+\label{sec:ensemble}
+
+We ensemble the multi-scale TTA outputs with WBF (IoU threshold $0.55$, score threshold $0.05$, equal weights). WBF was chosen over NMS because it preserves and re-weights overlapping detections rather than discarding all but the highest-scoring one, which empirically helps the tight LocSim thresholds (0.5\,m and 1\,m).
+
+The final submission \textbf{v16} is a two-level WBF tree:
+\begin{itemize}[leftmargin=*,topsep=2pt,itemsep=1pt]
+    \item $\text{v}_7 = \text{WBF}\bigl(\,\text{baseline}_{640},\,\text{baseline}_{960},\,\text{baseline}_{1280}\bigr)$
+    \item $\text{v}_{15} = \text{WBF}\bigl(\,\text{ft30}_{640},\,\text{ft30}_{960},\,\text{ft30}_{1280}\bigr)$
+    \item $\text{v}_{16} = \text{WBF}\bigl(\,\text{v}_7,\,\text{v}_{15}\,\bigr)$
+\end{itemize}
+The diversity comes from \emph{both} input scale (different effective receptive fields per player) \emph{and} the two checkpoints (different distribution-shift biases). After deduplication v16 contains $\sim$427\,k detections over 11{,}352 challenge images.
+
+\section{Pipeline Corrections}
+\label{sec:fixes}
+
+We isolated three bugs in the default pipeline whose fixes account for the bulk of our gain over a naive submission:
+
+\begin{enumerate}[leftmargin=*,topsep=2pt,itemsep=1pt]
+    \item \textbf{val\_dataloader override.} The stock \texttt{tools/test.py} invocation re-points \texttt{val\_dataloader} to the test/challenge split, which silently breaks the F1-threshold computation in \texttt{runner.val()} (no GT $\Rightarrow$ silent fallback to $0.05$). Our \texttt{scripts/submit.sh} keeps \texttt{val\_dataloader} on the val annotations and adds a \texttt{PHASE} argument that re-points only the \texttt{challenge\_dataset}. ($+\sim$8 mAP).
+    \item \textbf{Coordinate-space mismatch.} The MMPose checkpoint exports keypoints in the network input frame (FullHD letter-box). The evaluator expects native 4K. We rescale via the inverse letter-box. ($+\sim$30+ mAP; without this, evaluator returns $0.0$.)
+    \item \textbf{Submission-format strictness.} Each detection requires \texttt{id} (sequential), \texttt{area} ($w{\cdot}h$), and \texttt{visibility=2} as \emph{integer} (not float). Floats parse but score $0.0$.
+\end{enumerate}
+
+\section{Per-Camera Analysis}
+\label{sec:percam}
+
+To localize the source of the gap between detection-level recall and the integrated mAP-LocSim, we re-evaluated the v11 ensemble on the test split, projecting each predicted keypoint $\mathbf{k}_1$ to BEV via per-image \texttt{image\_to\_ground}, and grouping by camera identity (the camera identity is recovered as a hash of the calibration tuple \texttt{(camera\_matrix, undist\_poly)}). The test split exposes 14 distinct cameras, all of which are \emph{held out} from the 7 cameras seen at training time.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=\linewidth]{fig_per_camera.pdf}
+\caption{Per-camera player recall on test split, sorted by $r@0.5\,$m. The 18-point spread between best (C1, $r@0.5{=}97\%$) and worst (C14, $r@0.5{=}79\%$) camera reveals strong scene-dependent variability that aggregate metrics hide.}
+\label{fig:percam}
+\end{figure}
+
+\paragraph{Findings.} The median predicted-to-GT ground distance per camera is between \textbf{0.08\,m and 0.18\,m}, i.e.\ the model is \emph{already sub-meter accurate} on \emph{every} camera; the gap to the official Spiideo baseline ($76.17$) is therefore unlikely to come from raw keypoint precision. Instead, the four high-volume cameras (C7--C10, $\geq 1500$ images each) issue $20{-}24$ predictions per frame versus an average of $\sim 16$ players visible, suggesting that the residual mAP-LocSim gap is dominated by \emph{false-positive over-prediction} rather than localization error. This is consistent with the $r@5\,$m saturation at $\geq 97\%$ across all cameras.
+
+\paragraph{Implication.} A per-camera score-threshold calibration (or a per-camera score re-ranking layer) is, in this dataset, more likely to close the leaderboard gap than higher-resolution training.
+
+\section{Results}
+\label{sec:results}
+
+\begin{table}[h]
+\centering
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lcc}
+\toprule
+Recipe & Test & Challenge \\
+\midrule
+Broken pipeline (FullHD coords, default thr.) & 51.11 & --- \\
+Baseline single-scale (v6)                    & 63.91 & --- \\
+Baseline + multi-scale TTA (v7)               & 64.69 & --- \\
+Finetune-30 single-scale (v10)                & 64.37 & --- \\
+WBF(v7, ft30 single-scale) (v11)              & 65.46 & 66.67 \\
+\textbf{WBF(v7, multi-scale ft30) (v16)}      & ---   & \textbf{66.92} \\
+\bottomrule
+\end{tabular}
+\caption{mAP-LocSim on the official Synloc val (Test) and challenge splits. v16 is our final submission.}
+\label{tab:results}
+\end{table}
+
+The bulk of the gain over v6 (the corrected single-scale baseline) comes from \emph{ensembling} the baseline and finetuned checkpoints (+1.6 pt) and from multi-scale TTA on the finetuned weights (+0.25 pt on top of v11).
+
+\section{Reproducibility}
+\label{sec:repro}
+
+All code, configs, and recipe scripts are at\\
+\url{https://github.com/qbakom/SoccerNet-ch1} branch\\\texttt{feat/submit-fix-and-ensemble-tools}. The end-to-end recipe is:
+\begin{enumerate}[leftmargin=*,topsep=2pt,itemsep=1pt]
+    \item \texttt{scripts/submit.sh CKPT m 960 challenge} for each $\{640,960,1280\}$ and each checkpoint $\in\{$baseline, ft30$\}$ (six runs).
+    \item \texttt{scripts/rescale\_submission.py} on each output (FullHD$\to$4K).
+    \item \texttt{scripts/ensemble\_wbf\_n.py} to build $v_7, v_{15}$.
+    \item \texttt{scripts/ensemble\_wbf.py} to build the final $v_{16}$.
+\end{enumerate}
+
+{\small
+\bibliographystyle{ieeenat_fullname}
+\bibliography{main}
+}
+
+\end{document}
